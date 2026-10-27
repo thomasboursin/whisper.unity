@@ -1,3 +1,4 @@
+```yaml
 name: Testing
 
 on:
@@ -7,6 +8,8 @@ on:
   pull_request:
     branches:
       - master
+  workflow_dispatch:
+
 env:
   UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
   UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
@@ -14,29 +17,46 @@ env:
 
 jobs:
   testAllModes:
-    name: Test in ${{ matrix.unityVersion }}
+    name: Test in Unity ${{ matrix.unityVersion }}
     runs-on: windows-latest
+
     strategy:
       fail-fast: false
       matrix:
         unityVersion:
-          - 2019.4.40f1
+          - 2021.3.58f1
+
     steps:
-      - uses: actions/checkout@v3
-      - uses: game-ci/unity-test-runner@75d0d76deb40fa7c985d497a55d5877fb0f24c34
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Run Unity PlayMode tests
+        uses: game-ci/unity-test-runner@v4
         id: tests
         with:
           testMode: playmode
           unityVersion: ${{ matrix.unityVersion }}
-          checkName: ${{ matrix.unityVersion }} Test Results
+          checkName: Unity ${{ matrix.unityVersion }} Test Results
+          artifactsPath: artifacts
           coverageOptions: 'generateHtmlReport;assemblyFilters:+com.whisper.unity'
-      - uses: actions/upload-artifact@v4
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: Test results for ${{ matrix.unityVersion }}
-          path: ${{ steps.tests.outputs.artifactsPath }}
-      - uses: actions/upload-artifact@v4
-        if: always()
+          name: Test-results-Unity-${{ matrix.unityVersion }}
+          path: artifacts
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload coverage results
+        uses: actions/upload-artifact@v4
+        if: always() && steps.tests.outputs.coveragePath != ''
         with:
-          name: Coverage results for ${{ matrix.unityVersion }}
+          name: Coverage-Unity-${{ matrix.unityVersion }}
           path: ${{ steps.tests.outputs.coveragePath }}
+          if-no-files-found: warn
+          retention-days: 14
+```
