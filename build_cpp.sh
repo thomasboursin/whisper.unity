@@ -18,7 +18,8 @@ build_mac() {
   clean_build
   echo "Starting building for Mac (Metal)..."
 
-  cmake -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" \
+  cmake \
+    -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" \
     -DGGML_METAL=ON \
     -DCMAKE_BUILD_TYPE=Release \
     -DWHISPER_BUILD_TESTS=OFF \
@@ -26,8 +27,6 @@ build_mac() {
     "$whisper_path"
 
   cmake --build "$build_path" --parallel 4
-
-  echo "Build for Mac (Metal) complete!"
 
   target_path="$unity_project/Packages/com.whisper.unity/Plugins/MacOS"
   mkdir -p "$target_path"
@@ -63,12 +62,11 @@ build_ios() {
 
   cmake --build "$build_path" --parallel 4
 
-  echo "Build for iOS complete!"
-
   target_path="$unity_project/Packages/com.whisper.unity/Plugins/iOS"
   mkdir -p "$target_path"
 
   cp "$build_path/src/libwhisper.a" "$target_path/"
+
   find "$build_path/ggml/src" -type f -name '*.a' \
     -exec cp {} "$target_path/" \;
 
@@ -76,16 +74,25 @@ build_ios() {
 }
 
 build_android() {
-  if [ -z "$android_sdk_path" ]; then
-    echo "ERROR: Android CMake toolchain path was not provided."
-    echo "Pass the path to android.toolchain.cmake as the third argument."
+  if [ -z "$android_sdk_path" ] || [ ! -f "$android_sdk_path" ]; then
+    echo "ERROR: Android CMake toolchain not found: $android_sdk_path"
     exit 1
   fi
 
-  if [ ! -f "$android_sdk_path" ]; then
-    echo "ERROR: Android toolchain not found: $android_sdk_path"
+  echo "Preparing ARM hardware capability header compatibility..."
+
+  cpu_source="$whisper_path/ggml/src/ggml-cpu/ggml-cpu.c"
+
+  if [ ! -f "$cpu_source" ]; then
+    echo "ERROR: Source file not found: $cpu_source"
     exit 1
   fi
+
+  if ! grep -q '#include <asm/hwcap.h>' "$cpu_source"; then
+    sed -i '/#include <sys\/auxv.h>/a #include <asm/hwcap.h>' "$cpu_source"
+  fi
+
+  grep -n -E 'sys/auxv.h|asm/hwcap.h' "$cpu_source"
 
   clean_build
   echo "Starting building for Android..."
@@ -107,8 +114,6 @@ build_android() {
 
   cmake --build "$build_path" --parallel 4
 
-  echo "Checking generated Android libraries..."
-
   required_libraries=(
     "$build_path/ggml/src/libggml-base.a"
     "$build_path/ggml/src/libggml-cpu.a"
@@ -116,11 +121,12 @@ build_android() {
     "$build_path/src/libwhisper.a"
   )
 
+  echo "Checking generated Android libraries..."
+
   for lib in "${required_libraries[@]}"; do
     if [ ! -s "$lib" ]; then
       echo "ERROR: Required library missing or empty: $lib"
-      echo "Contents of build directory:"
-      find "$build_path" -type f \( -name '*.a' -o -name '*.so' \) -print
+      find "$build_path" -type f -name '*.a' -print
       exit 1
     fi
     ls -lh "$lib"
@@ -129,22 +135,15 @@ build_android() {
   target_path="$unity_project/Packages/com.whisper.unity/Plugins/Android"
   mkdir -p "$target_path"
 
-  # Remove old archives only after all new archives have been verified.
+  # Replace existing archives only after successful compilation.
   rm -f "$target_path"/*.a
 
   for lib in "${required_libraries[@]}"; do
     cp "$lib" "$target_path/"
   done
 
-  echo "Android libraries copied successfully:"
+  echo "Final Android libraries:"
   ls -lh "$target_path"
-
-  for lib in libggml-base.a libggml-cpu.a libggml.a libwhisper.a; do
-    if [ ! -s "$target_path/$lib" ]; then
-      echo "ERROR: Library missing after copy: $target_path/$lib"
-      exit 1
-    fi
-  done
 
   echo "Build for Android complete!"
 }
