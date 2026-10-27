@@ -1,4 +1,3 @@
-```yaml
 name: Testing
 
 on:
@@ -59,4 +58,3 @@ jobs:
           path: ${{ steps.tests.outputs.coveragePath }}
           if-no-files-found: warn
           retention-days: 14
-```
