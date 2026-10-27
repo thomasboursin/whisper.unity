@@ -1,40 +1,51 @@
 name: Build C++
+
 on:
   workflow_dispatch:
     inputs:
       whisper_cpp_repo:
-        description: 'whisper.cpp repo link'
+        description: "whisper.cpp repo link"
         required: true
-        default: 'ggerganov/whisper.cpp'
+        default: "ggerganov/whisper.cpp"
       whisper_cpp_repo_ref:
-        description: 'Tag, branch or commit'
+        description: "Tag, branch or commit"
         required: true
-        default: 'v1.7.5'
+        default: "v1.7.5"
       target_platform:
-        description: 'Target platforms'
+        description: "Target platforms"
         required: true
-        default: 'all'
+        default: "all"
+        type: choice
+        options:
+          - all
+          - windows
+          - linux
+          - macos
+          - ios
+          - android
+
 jobs:
   build-windows:
     name: Build for Windows (x86_64, Vulkan)
     if: ${{ contains(fromJson('["windows", "all"]'), github.event.inputs.target_platform) }}
     runs-on: windows-latest
+
     steps:
       - name: Clone whisper.unity
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           path: whisper-unity
-          
+
       - name: Clone whisper.cpp
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: ${{ github.event.inputs.whisper_cpp_repo }}
           ref: ${{ github.event.inputs.whisper_cpp_repo_ref }}
           path: whisper-cpp
-          
+
       - name: Add msbuild to PATH
-        uses: microsoft/setup-msbuild@v1
-        
+        uses: microsoft/setup-msbuild@v2
+
       - name: Install Vulkan SDK
         uses: jakoch/install-vulkan-sdk-action@v1.0.4
         with:
@@ -45,107 +56,110 @@ jobs:
           stripdown: true
 
       - name: Run build script
+        shell: cmd
         run: |
           cd whisper-unity
           .\build_cpp.bat ..\whisper-cpp\
-          cd ${{ github.workspace }}\whisper-cpp\build\bin\Release
+          cd /d "${{ github.workspace }}\whisper-cpp\build\bin\Release"
           ren whisper.dll libwhisper.dll
-          
+
       - name: Upload results
         uses: actions/upload-artifact@v4
         with:
           name: windows
           path: ${{ github.workspace }}/whisper-cpp/build/bin/Release
           if-no-files-found: error
-          
+
   build-linux:
     name: Build for Linux (x86_64, Vulkan)
     if: ${{ contains(fromJson('["linux", "all"]'), github.event.inputs.target_platform) }}
     runs-on: ubuntu-22.04
+
     steps:
       - name: Clone whisper.unity
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           path: whisper-unity
-          
+
       - name: Clone whisper.cpp
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: ${{ github.event.inputs.whisper_cpp_repo }}
           ref: ${{ github.event.inputs.whisper_cpp_repo_ref }}
           path: whisper-cpp
 
-      - name: Dependencies
-        id: depends
+      - name: Install dependencies
         run: |
           wget -qO - https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo apt-key add -
           sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-jammy.list https://packages.lunarg.com/vulkan/lunarg-vulkan-jammy.list
           sudo apt-get update -y
           sudo apt-get install -y build-essential mesa-vulkan-drivers vulkan-sdk libcurl4-openssl-dev
-          
+
       - name: Run build script
         run: |
           cd whisper-unity
-          sh build_cpp_linux.sh ${{ github.workspace }}/whisper-cpp
-          
+          sh build_cpp_linux.sh "${{ github.workspace }}/whisper-cpp"
+
       - name: Upload results
         uses: actions/upload-artifact@v4
         with:
           name: linux
           path: ${{ github.workspace }}/whisper-unity/Packages/com.whisper.unity/Plugins/Linux/*.so
           if-no-files-found: error
-          
+
   build-macos:
-    name: Build for MacOS Metal (ARM, x86_64)
+    name: Build for macOS Metal (ARM, x86_64)
     if: ${{ contains(fromJson('["macos", "all"]'), github.event.inputs.target_platform) }}
-    runs-on: macOS-13
+    runs-on: macos-13
+
     steps:
       - name: Clone whisper.unity
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           path: whisper-unity
-          
+
       - name: Clone whisper.cpp
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: ${{ github.event.inputs.whisper_cpp_repo }}
           ref: ${{ github.event.inputs.whisper_cpp_repo_ref }}
           path: whisper-cpp
-          
+
       - name: Run build script
         run: |
           cd whisper-unity
-          sh build_cpp.sh ${{ github.workspace }}/whisper-cpp/ mac
-          
+          sh build_cpp.sh "${{ github.workspace }}/whisper-cpp/" mac
+
       - name: Upload results
         uses: actions/upload-artifact@v4
         with:
           name: macos
           path: ${{ github.workspace }}/whisper-unity/Packages/com.whisper.unity/Plugins/MacOS/*.dylib
           if-no-files-found: error
-          
+
   build-ios:
     name: Build for iOS
     if: ${{ contains(fromJson('["ios", "all"]'), github.event.inputs.target_platform) }}
-    runs-on: macOS-latest
+    runs-on: macos-latest
+
     steps:
       - name: Clone whisper.unity
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           path: whisper-unity
-          
+
       - name: Clone whisper.cpp
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: ${{ github.event.inputs.whisper_cpp_repo }}
           ref: ${{ github.event.inputs.whisper_cpp_repo_ref }}
           path: whisper-cpp
-          
+
       - name: Run build script
         run: |
           cd whisper-unity
-          sh build_cpp.sh ${{ github.workspace }}/whisper-cpp/ ios
-          
+          sh build_cpp.sh "${{ github.workspace }}/whisper-cpp/" ios
+
       - name: Upload results
         uses: actions/upload-artifact@v4
         with:
@@ -157,44 +171,62 @@ jobs:
     name: Build for Android (arm64-v8a)
     if: ${{ contains(fromJson('["android", "all"]'), github.event.inputs.target_platform) }}
     runs-on: ubuntu-latest
-    steps:          
+
+    steps:
       - name: Install Java
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v4
         with:
           distribution: zulu
-          java-version: 17
-      
+          java-version: "17"
+
       - name: Setup Android SDK
         uses: android-actions/setup-android@v4
         with:
           packages: platform-tools
 
-      - name: Install Android NDK
+      - name: Install Android NDK and build tools
         run: |
-          sdkmanager --install "build-tools;33.0.2"
+          sdkmanager --install "build-tools;30.0.2"
           sdkmanager --install "cmake;3.22.1"
-          sdkmanager --install "ndk;25.1.8937393"
-          
+          sdkmanager --install "ndk;21.3.6528147"
+
       - name: Clone whisper.unity
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           path: whisper-unity
-          
+
       - name: Clone whisper.cpp
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: ${{ github.event.inputs.whisper_cpp_repo }}
           ref: ${{ github.event.inputs.whisper_cpp_repo_ref }}
           path: whisper-cpp
-          
+
+      - name: Verify Android NDK
+        run: |
+          test -f "$ANDROID_HOME/ndk/21.3.6528147/build/cmake/android.toolchain.cmake"
+          "$ANDROID_HOME/ndk/21.3.6528147/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++" --version
+
       - name: Run build script
         run: |
           cd whisper-unity
-          sh build_cpp.sh ${{ github.workspace }}/whisper-cpp/ android $ANDROID_HOME/ndk/25.1.8937393/build/cmake/android.toolchain.cmake
-          
+          sh build_cpp.sh \
+            "${{ github.workspace }}/whisper-cpp/" \
+            android \
+            "$ANDROID_HOME/ndk/21.3.6528147/build/cmake/android.toolchain.cmake"
+
+      - name: List Android libraries
+        run: |
+          ls -lh "${{ github.workspace }}/whisper-unity/Packages/com.whisper.unity/Plugins/Android/"
+          test -f "${{ github.workspace }}/whisper-unity/Packages/com.whisper.unity/Plugins/Android/libwhisper.a"
+          test -f "${{ github.workspace }}/whisper-unity/Packages/com.whisper.unity/Plugins/Android/libggml.a"
+          test -f "${{ github.workspace }}/whisper-unity/Packages/com.whisper.unity/Plugins/Android/libggml-base.a"
+          test -f "${{ github.workspace }}/whisper-unity/Packages/com.whisper.unity/Plugins/Android/libggml-cpu.a"
+
       - name: Upload results
         uses: actions/upload-artifact@v4
         with:
           name: android
           path: ${{ github.workspace }}/whisper-unity/Packages/com.whisper.unity/Plugins/Android/*.a
           if-no-files-found: error
+          retention-days: 14
