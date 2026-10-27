@@ -1,4 +1,3 @@
-```bash
 #!/bin/bash
 
 set -Eeuo pipefail
@@ -171,4 +170,3 @@ case "$targets" in
     exit 1
     ;;
 esac
-```
